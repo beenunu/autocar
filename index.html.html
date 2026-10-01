@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>자율주행차 강화학습 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceef1; --card:#ffffff; --text:#1d2228; --muted:#5d6670; --border:#d5d9de;
+  --asphalt:#353a41; --road:#e3e6ea; --wall:#5b626b; --lane:#f2c230;
+  --sign:#1f5fbf; --sign-text:#ffffff; --good:30,150,85; --bad:214,58,48;
+  --chart-dot:rgba(31,95,191,.28); --chart-line:#1f5fbf; --zero:#9aa1a9; --fog:#646b74; --fog2:#6f7680; --fog-text:#e8ebef;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#16191d; --card:#20242a; --text:#e8ebef; --muted:#9aa3ad; --border:#343a42;
+    --asphalt:#0e1013; --road:#2c3138; --wall:#4a5059; --lane:#e0b22a;
+    --sign:#5b95ec; --sign-text:#0d1420; --chart-dot:rgba(91,149,236,.3); --chart-line:#5b95ec; --zero:#59616b; --fog:#2b3036; --fog2:#33393f; --fog-text:#8d949d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16191d; --card:#20242a; --text:#e8ebef; --muted:#9aa3ad; --border:#343a42;
+  --asphalt:#0e1013; --road:#2c3138; --wall:#4a5059; --lane:#e0b22a;
+  --sign:#5b95ec; --sign-text:#0d1420; --chart-dot:rgba(91,149,236,.3); --chart-line:#5b95ec; --zero:#59616b; --fog:#2b3036; --fog2:#33393f; --fog-text:#8d949d;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 40px}
+header h1{font-family:'Black Han Sans','IBM Plex Sans KR',sans-serif;font-weight:400;font-size:clamp(26px,4.4vw,40px);line-height:1.15;margin:0 0 6px;letter-spacing:-.5px}
+header p{margin:0;color:var(--muted);max-width:62ch}
+details.help{margin:14px 0 18px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+details.help summary{cursor:pointer;font-weight:500}
+details.help ol{margin:8px 0 2px;padding-left:20px}
+details.help li{margin:3px 0}
+.layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(290px,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.side{display:flex;flex-direction:column;gap:14px}
+h2{font-size:16px;font-weight:700;margin:0 0 10px}
+.status{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:12px;font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--road);font-weight:500}
+.pill.on{background:var(--sign);color:var(--sign-text)}
+.result{color:var(--muted)}
+.board-frame{background:var(--asphalt);padding:10px;border-radius:10px;border-left:4px solid var(--lane);border-right:4px solid var(--lane)}
+.board{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;aspect-ratio:1/1;touch-action:none}
+.cell{position:relative;border-radius:5px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;-webkit-user-select:none;background:var(--road);overflow:hidden}
+.cell .icon{font-size:clamp(16px,3.6vw,30px);line-height:1;position:relative;z-index:2}
+.cell .arrow{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(14px,3vw,26px);font-weight:700;color:var(--text);opacity:.7;z-index:1}
+.cell .val{position:absolute;right:3px;bottom:1px;font-size:10px;font-weight:500;color:var(--text);opacity:.85;z-index:3}
+.cell.start{outline:2px dashed var(--lane);outline-offset:-3px}
+.cell .startlbl{position:absolute;left:3px;top:1px;font-size:10px;font-weight:700;color:var(--text);opacity:.8;z-index:3}
+.cell:focus-visible{outline:3px solid var(--sign);outline-offset:-3px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:13px;color:var(--muted)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{font:inherit;font-size:14px;font-weight:500;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--road);color:var(--text);cursor:pointer;min-height:42px}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--sign);outline-offset:2px}
+button.primary{background:var(--sign);color:var(--sign-text);border-color:var(--sign);grid-column:1/-1;font-size:16px}
+button.wide{grid-column:1/-1}
+.row{margin:10px 0 14px}
+.row label{display:flex;justify-content:space-between;gap:8px;font-weight:500;font-size:14px}
+.row output{font-variant-numeric:tabular-nums;min-width:3.5ch;text-align:right;font-weight:700}
+.row small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+input[type=range]{width:100%;accent-color:var(--sign);margin:6px 0 0}
+.note{font-size:12.5px;color:var(--muted);margin:4px 0 0}
+.tools{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.tools button{padding:6px 2px;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:52px}
+.tools button .ti{font-size:20px;line-height:1}
+.tools button[aria-pressed="true"]{background:var(--sign);color:var(--sign-text);border-color:var(--sign)}
+.checks{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;margin-bottom:6px}
+.checks label{display:flex;align-items:center;gap:6px;cursor:pointer}
+details.adv summary{cursor:pointer;font-weight:500;font-size:14px;margin-top:6px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.stat{background:var(--road);border-radius:8px;padding:8px 6px;text-align:center}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat span{font-size:12px;color:var(--muted)}
+.rate{margin-top:10px;font-size:14px}
+.chart-card{margin-top:18px}
+.chart-box{position:relative;height:230px}
+canvas{width:100%;height:100%;display:block}
+.chart-legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.toast{min-height:20px;font-size:13px;color:rgb(var(--bad));margin-top:6px}
+.tools{grid-template-columns:repeat(3,1fr)}
+.cell.inspect{box-shadow:inset 0 0 0 3px var(--sign)}
+.cell .icon.flip{transform:scaleX(-1)}
+.inspector{margin-top:14px;padding:12px;border-radius:10px;background:var(--road)}
+.inspector h3{margin:0 0 8px;font-size:14px;font-weight:700}
+.qcross{display:grid;grid-template-columns:repeat(3,minmax(0,78px));gap:4px;justify-content:center}
+.qcross div{border-radius:6px;padding:6px 2px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;background:var(--card);border:1px solid var(--border)}
+.qcross div.best{background:var(--sign);color:var(--sign-text);border-color:var(--sign);font-weight:700}
+.qcross div.mid{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
+.qcross .ar{display:block;font-size:16px;font-weight:700}
+.inspector p{margin:8px 0 0;font-size:13px;color:var(--muted)}
+.mission-card{margin-top:18px}
+.mtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.mtabs button{min-height:36px;padding:6px 12px}
+.mtabs button[aria-selected="true"]{background:var(--sign);color:var(--sign-text);border-color:var(--sign)}
+.mpanel h3{margin:0 0 6px;font-size:17px;font-weight:700}
+.mpanel .how{margin:0 0 10px;color:var(--muted);font-size:14px}
+.opts{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.opts label{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px}
+.opts label:has(input:checked){border-color:var(--sign);background:var(--road)}
+.mbtns{display:flex;gap:8px;flex-wrap:wrap}
+.mbtns button{min-height:40px}
+.merr{font-size:13px;color:rgb(var(--bad));min-height:18px;margin-top:4px}
+.mexp{margin-top:10px;padding:12px;border-radius:8px;background:var(--road);font-size:14px}
+.mexp b.ok{color:rgb(var(--good))} .mexp b.no{color:rgb(var(--bad))}
+.mready{font-size:13px;color:rgb(var(--good));margin-top:6px;min-height:18px}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:no-preference){.result.goal{animation:pop .5s ease}}
+.result.goal{color:rgb(var(--good));font-weight:700}
+.pad{margin-top:12px;display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,52px);gap:6px;justify-content:center}
+.pad[hidden]{display:none}
+.pad button{font-size:22px;padding:0;min-height:52px}
+.pad .u{grid-column:2;grid-row:1}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:2}.pad .r{grid-column:3;grid-row:2}
+.vs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.viewctl{margin-top:10px;text-align:center}
+.viewctl[hidden]{display:none}
+.viewctl p{margin:0 0 6px;font-size:14px;font-weight:500}
+.viewctl .seg{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.viewctl button{min-height:38px;padding:6px 12px}
+.viewctl button[aria-pressed="true"]{background:var(--sign);color:var(--sign-text);border-color:var(--sign)}
+.cell.fog{cursor:default}
+.cell.fog .icon{color:var(--fog-text);font-size:clamp(12px,2.4vw,18px);opacity:.7}
+.cell.seen{box-shadow:inset 0 0 0 3px var(--lane)}
+.viewctl .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0;font-weight:400}
+.vs .stat b{font-size:22px}
+.live{margin-top:8px;font-size:14px;text-align:center;min-height:21px}
+.live b{font-variant-numeric:tabular-nums}
+button.manual-on{background:rgb(var(--good));border-color:rgb(var(--good));color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>자율주행차 강화학습 시뮬레이터</h1>
+    <p>아무도 정답을 알려주지 않아요. 차는 점수(보상)만 보고 수백 번 달려 보며 스스로 길을 배워요.</p>
+  </header>
+
+  <details class="help">
+    <summary>사용 방법</summary>
+    <ol>
+      <li>먼저 <b>🎮 내가 운전하기</b>를 눌러 방향키(또는 화면의 화살표 버튼)로 직접 운전해 보세요. AI와 똑같은 점수 규칙으로 점수를 받아요. 실제 자율주행차처럼 차 주변 몇 칸만 보여요(👁 센서 시야).</li>
+      <li><b>학습 시작</b>을 누르면 차가 출발지에서 목적지까지 반복해서 달리며 배워요.</li>
+      <li>칸 색깔은 차가 생각하는 그 칸의 점수예요. 초록일수록 좋은 칸, 빨강일수록 위험한 칸이에요.</li>
+      <li>화살표는 차가 "여기서는 이쪽으로 가는 게 제일 좋다"고 배운 방향이에요.</li>
+      <li>🔍 살펴보기 도구로 칸을 누르면, 차가 그 칸에서 기억하는 네 방향의 점수표를 볼 수 있어요.</li>
+      <li>🏢 건물에 부딪히면 사고예요. 지도 가장자리는 연석이라 그 자리에 멈춰요.</li>
+      <li>아래의 <b>오늘의 미션</b>을 차례로 해결해 보세요.</li>
+      <li>다 배웠다면 <b>배운 대로 운전 보기</b>로 결과를 확인하세요.</li>
+    </ol>
+  </details>
+
+  <div class="layout">
+    <section class="card">
+      <div class="status">
+        <span class="pill" id="modePill">멈춤</span>
+        <span class="result" id="lastResult">아직 주행하지 않았어요.</span>
+      </div>
+      <div class="board-frame"><div class="board" id="board" role="grid" aria-label="도로 지도"></div></div>
+      <div class="legend">
+        <span>🚗 자율주행차</span><span>🏁 목적지</span><span>💥 사고 위험</span><span>🏢 건물 (부딪히면 사고)</span>
+        <span><i class="sw" style="background:rgba(var(--good),.7)"></i>좋은 칸</span>
+        <span><i class="sw" style="background:rgba(var(--bad),.7)"></i>위험한 칸</span>
+        <span><i class="sw" style="background:var(--fog)"></i>센서 밖 (안 보임)</span>
+        <span><i class="sw" style="box-shadow:inset 0 0 0 2px var(--lane)"></i>센서로 보이는 칸</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="sEp">0</b><span>주행 횟수</span></div>
+        <div class="stat"><b id="sGoal">0</b><span>🏁 도착</span></div>
+        <div class="stat"><b id="sCrash">0</b><span>💥 사고</span></div>
+        <div class="stat"><b id="sTime">0</b><span>⏱ 시간 초과</span></div>
+      </div>
+      <div class="pad" id="pad" hidden aria-label="방향 버튼">
+        <button class="u" data-a="0" aria-label="위로">↑</button>
+        <button class="l" data-a="3" aria-label="왼쪽으로">←</button>
+        <button class="d" data-a="2" aria-label="아래로">↓</button>
+        <button class="r" data-a="1" aria-label="오른쪽으로">→</button>
+      </div>
+      <div class="live" id="live" aria-live="polite"></div>
+      <div class="rate" id="rate">최근 20번 도착률: -</div>
+      <div class="vs">
+        <div class="stat"><b id="sHumanS">-</b><span>🙋 내 최고 점수</span></div>
+        <div class="stat"><b id="sAI">-</b><span>🤖 AI가 배운 대로 운전한 점수</span></div>
+      </div>
+      <div class="inspector" id="inspector" aria-live="polite"></div>
+    </section>
+
+    <div class="side">
+      <section class="card">
+        <h2>학습 조작</h2>
+        <div class="btns">
+          <button class="primary" id="btnRun">▶ 학습 시작</button>
+          <button id="btnStep">한 걸음씩</button>
+          <button id="btnFast">⚡ 100번 빠르게</button>
+          <button id="btnDemo">🚗 배운 대로 운전 보기</button>
+          <button id="btnReset">🔄 처음부터 다시 배우기</button>
+          <button class="wide" id="btnManual">🎮 내가 운전하기 (방향키)</button>
+        </div>
+        <div class="viewctl" id="viewctl">
+          <p>👁 센서 시야 (내가 운전할 때 보이는 범위)</p>
+          <div class="seg">
+            <button data-v="2" aria-pressed="true">주변 2칸</button>
+            <button data-v="1" aria-pressed="false">주변 1칸</button>
+          </div>
+          <p class="hint">자율주행차처럼 주변만 보며 운전해요. 노란 테두리 칸만 보이고 나머지는 가려져요. 누르면 운전 모드가 바로 켜져요.</p>
+        </div>
+        <div class="row">
+          <label for="speed">학습 속도 <output id="oSpeed"></output></label>
+          <input type="range" id="speed" min="1" max="10" step="1" value="6">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>점수 규칙 (보상)</h2>
+        <div class="row">
+          <label for="goalR">🏁 목적지 도착 <output id="oGoal"></output></label>
+          <input type="range" id="goalR" min="0" max="20" step="1" value="10">
+        </div>
+        <div class="row">
+          <label for="crashR">💥 사고 <output id="oCrash"></output></label>
+          <input type="range" id="crashR" min="-20" max="10" step="1" value="-10">
+        </div>
+        <div class="row">
+          <label for="moveR">🛣 한 칸 이동할 때마다 <output id="oMove"></output></label>
+          <input type="range" id="moveR" min="-3" max="2" step="0.5" value="-1">
+        </div>
+        <button id="btnDefaults" style="width:100%;margin-bottom:8px">↩ 점수 규칙 기본값으로</button>
+        <p class="note">점수를 바꾸면 차는 바뀐 규칙으로 이어서 배워요. 완전히 새로 배우게 하려면 <b>처음부터 다시 배우기</b>를 누르세요.</p>
+      </section>
+
+      <section class="card">
+        <h2>지도 꾸미기와 살펴보기</h2>
+        <div class="tools" id="tools">
+          <button data-tool="?" aria-pressed="true"><span class="ti">🔍</span>살펴보기</button>
+          <button data-tool="." aria-pressed="false"><span class="ti">⬜</span>도로</button>
+          <button data-tool="#" aria-pressed="false"><span class="ti">🏢</span>건물</button>
+          <button data-tool="X" aria-pressed="false"><span class="ti">💥</span>사고 위험</button>
+          <button data-tool="G" aria-pressed="false"><span class="ti">🏁</span>목적지</button>
+          <button data-tool="S" aria-pressed="false"><span class="ti">🚩</span>출발지</button>
+        </div>
+        <p class="note">도구를 고른 뒤 지도 칸을 누르세요. 🔍 살펴보기는 지도를 바꾸지 않고 점수표만 보여줘요. 지도를 바꿔도 차의 기억은 남아 있어서, 바뀐 길을 다시 배우는 모습을 볼 수 있어요.</p>
+        <div class="toast" id="toast" role="status"></div>
+        <button class="wide" id="btnMap" style="width:100%">🗺 기본 지도로 되돌리기</button>
+      </section>
+
+      <section class="card">
+        <h2>보기 설정</h2>
+        <div class="checks">
+          <label><input type="checkbox" id="cColor" checked> 칸 색깔</label>
+          <label><input type="checkbox" id="cArrow" checked> 화살표</label>
+          <label><input type="checkbox" id="cNum"> 점수 숫자</label>
+        </div>
+        <details class="adv">
+          <summary>고급 설정</summary>
+          <div class="row">
+            <label for="eps">새 길 시도 비율 (탐험) <output id="oEps"></output></label>
+            <input type="range" id="eps" min="0" max="0.5" step="0.05" value="0.1">
+            <small>높을수록 아는 길 대신 새 길을 자주 시도해요.</small>
+          </div>
+          <div class="row">
+            <label for="alpha">학습률 <output id="oAlpha"></output></label>
+            <input type="range" id="alpha" min="0.05" max="1" step="0.05" value="0.1">
+            <small>한 번 주행한 결과로 점수표를 얼마나 크게 고칠지예요.</small>
+          </div>
+          <div class="row">
+            <label for="gamma">나중 점수의 중요도 (할인율) <output id="oGamma"></output></label>
+            <input type="range" id="gamma" min="0.5" max="0.99" step="0.01" value="0.9">
+            <small>높을수록 멀리 있는 목적지 점수를 더 중요하게 생각해요.</small>
+          </div>
+          <div class="row">
+            <label for="maxSteps">한 번 주행 최대 이동 수 <output id="oMax"></output></label>
+            <input type="range" id="maxSteps" min="20" max="300" step="10" value="100">
+            <small>이만큼 움직여도 끝나지 않으면 시간 초과로 다시 출발해요.</small>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <section class="card mission-card">
+    <h2>오늘의 미션</h2>
+    <div class="mtabs" id="mtabs" role="tablist"></div>
+    <div class="mpanel" id="mpanel"></div>
+  </section>
+
+  <section class="card chart-card">
+    <h2>학습 기록: 한 번 주행할 때마다 받은 총점</h2>
+    <div class="chart-box"><canvas id="chart" aria-label="주행 횟수에 따른 총점 그래프"></canvas></div>
+    <div class="chart-legend">
+      <span><i class="sw" style="background:var(--chart-dot)"></i>한 번 주행의 총점</span>
+      <span><i class="sw" style="background:var(--chart-line)"></i>최근 20번 평균</span>
+      <span>그래프가 오른쪽으로 갈수록 올라가면 차가 잘 배우고 있다는 뜻이에요.</span>
+    </div>
+  </section>
+</div>
+
+<script>
+const N = 8;
+const DEFAULT_MAP = [
+  ".....X.G",
+  ".##.....",
+  ".##.X.#.",
+  "....X.#.",
+  "##......",
+  "...##.X.",
+  ".X.##...",
+  "S......."
+];
+const DR = [-1, 0, 1, 0], DC = [0, 1, 0, -1], ARROWS = ['↑', '→', '↓', '←'];
+const SPS = [1, 2, 4, 8, 15, 30, 80, 300, 1500, 6000];
+const SPEED_NAMES = ['아주 느리게', '느리게', '보통', '조금 빠르게', '빠르게', '더 빠르게', '아주 빠르게', '번개', '초고속', '최고속'];
+const DEFAULTS = { goalR: 10, crashR: -10, moveR: -1, eps: 0.1, alpha: 0.1, gamma: 0.9, maxSteps: 100 };
+const P = { ...DEFAULTS, speed: 6 };
+const RANGE_IDS = { goalR: 'goalR', crashR: 'crashR', moveR: 'moveR', eps: 'eps', alpha: 'alpha', gamma: 'gamma', maxSteps: 'maxSteps' };
+const view = { color: true, arrow: true, num: false };
+
+let grid, start, Q, car, epReturn = 0, epSteps = 0, history = [], stats, mode = 'idle', tool = '?', last = null, chartDirty = true, inspect = null, carFlip = false, demoSteps = 0, humanBest = null, humanBestS = null, viewRange = 2, aiLast = null, lastStepR = null;
+const $ = id => document.getElementById(id);
+
+function loadMap(rows) {
+  grid = rows.map(r => r.split(''));
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r][c] === 'S') { start = { r, c }; grid[r][c] = '.'; }
+}
+function resetQ() {
+  Q = new Float64Array(N * N * 4);
+  history = [];
+  stats = { ep: 0, goal: 0, crash: 0, timeout: 0, recent: [] };
+  last = null;
+  resetCar();
+  chartDirty = true;
+}
+function resetCar() { car = { r: start.r, c: start.c }; epReturn = 0; epSteps = 0; carFlip = false; }
+function maxQ(s) { let m = -Infinity; for (let a = 0; a < 4; a++) m = Math.max(m, Q[s * 4 + a]); return m; }
+function bestAction(s) {
+  const m = maxQ(s), opts = [];
+  for (let a = 0; a < 4; a++) if (Q[s * 4 + a] === m) opts.push(a);
+  return opts[Math.floor(Math.random() * opts.length)];
+}
+function learned(s) { for (let a = 0; a < 4; a++) if (Q[s * 4 + a] !== 0) return true; return false; }
+
+function transition(a) {
+  let nr = car.r + DR[a], nc = car.c + DC[a], hit = false;
+  if (a === 1) carFlip = true; else if (a === 3) carFlip = false;
+  if (nr < 0 || nr >= N || nc < 0 || nc >= N) { nr = car.r; nc = car.c; }
+  else if (grid[nr][nc] === '#') { hit = true; nr = car.r; nc = car.c; }
+  const t = grid[nr][nc];
+  if (hit) return { nr, nc, r: P.crashR, done: true, outcome: 'crash' };
+  if (t === 'G') return { nr, nc, r: P.goalR, done: true, outcome: 'goal' };
+  if (t === 'X') return { nr, nc, r: P.crashR, done: true, outcome: 'crash' };
+  return { nr, nc, r: P.moveR, done: false, outcome: null };
+}
+function manualMove(a) {
+  if (mode !== 'manual') return;
+  let { nr, nc, r, done, outcome } = transition(a);
+  epReturn += r; epSteps++; lastStepR = r;
+  car = { r: nr, c: nc };
+  if (!done && epSteps >= P.maxSteps) { done = true; outcome = 'timeout'; }
+  if (done) {
+    if (viewRange > 0) { if (humanBestS === null || epReturn > humanBestS) humanBestS = epReturn; }
+    else if (humanBest === null || epReturn > humanBest) humanBest = epReturn;
+    last = { outcome, ret: epReturn, steps: epSteps, who: viewRange > 0 ? 'humanS' : 'human' };
+    resetCar(); lastStepR = null;
+  }
+  renderAll();
+}
+function step(learn, greedy) {
+  const s = car.r * N + car.c;
+  const a = (!greedy && Math.random() < P.eps) ? Math.floor(Math.random() * 4) : bestAction(s);
+  let { nr, nc, r, done, outcome } = transition(a);
+  epReturn += r; epSteps++;
+  if (learn) {
+    const target = done ? r : r + P.gamma * maxQ(nr * N + nc);
+    Q[s * 4 + a] += P.alpha * (target - Q[s * 4 + a]);
+  }
+  car = { r: nr, c: nc };
+  const limit = greedy ? Math.min(P.maxSteps, 40) : P.maxSteps;
+  if (!done && epSteps >= limit) { done = true; outcome = 'timeout'; }
+  if (done) endEpisode(outcome, learn);
+}
+function endEpisode(outcome, record) {
+  if (record) {
+    history.push(epReturn);
+    stats.ep++; stats[outcome]++;
+    stats.recent.push(outcome === 'goal');
+    if (stats.recent.length > 20) stats.recent.shift();
+    chartDirty = true;
+  }
+  last = { outcome, ret: epReturn, steps: epSteps, who: record ? 'train' : 'ai' };
+  if (!record) aiLast = epReturn;
+  resetCar();
+  if (mode === 'demo') setMode('idle');
+}
+
+const cells = [];
+function buildBoard() {
+  const b = $('board');
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const el = document.createElement('div');
+    el.className = 'cell'; el.tabIndex = 0; el.setAttribute('role', 'gridcell');
+    el.innerHTML = '<span class="arrow"></span><span class="icon"></span><span class="val"></span><span class="startlbl"></span>';
+    el.addEventListener('pointerdown', e => { e.preventDefault(); painting = true; applyTool(r, c); });
+    el.addEventListener('pointerenter', () => { if (painting && tool !== 'S' && tool !== 'G' && tool !== '?') applyTool(r, c); });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyTool(r, c); } });
+    b.appendChild(el); cells.push(el);
+  }
+}
+let painting = false;
+window.addEventListener('pointerup', () => painting = false);
+
+function toast(msg) { const t = $('toast'); t.textContent = msg; clearTimeout(toast.h); toast.h = setTimeout(() => t.textContent = '', 2500); }
+function applyTool(r, c) {
+  if (mode === 'manual') { toast('운전 중에는 지도를 바꾸거나 살펴볼 수 없어요. 운전 그만하기를 먼저 눌러 주세요.'); return; }
+  if (tool === '?') { inspect = { r, c }; renderBoard(); renderInspector(); return; }
+  if (tool === 'S') {
+    if (grid[r][c] !== '.') grid[r][c] = '.';
+    start = { r, c }; resetCar();
+  } else {
+    if (r === start.r && c === start.c && tool !== '.') { toast('출발지 칸에는 놓을 수 없어요. 출발지를 먼저 옮겨 주세요.'); return; }
+    grid[r][c] = tool;
+    if (car.r === r && car.c === c && tool !== '.') resetCar();
+  }
+  renderBoard(); renderInspector();
+}
+
+function renderBoard() {
+  const scale = Math.max(Math.abs(P.goalR), Math.abs(P.crashR), 1);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const el = cells[r * N + c], t = grid[r][c], s = r * N + c;
+    const [arrow, icon, val, slbl] = el.children;
+    let bg = 'var(--road)', ic = '', ar = '', vl = '';
+    const isCar = car.r === r && car.c === c;
+    const isStart = start.r === r && start.c === c;
+    const fog = mode === 'manual' && viewRange > 0 && Math.max(Math.abs(r - car.r), Math.abs(c - car.c)) > viewRange;
+    el.classList.toggle('fog', fog);
+    el.classList.toggle('seen', !fog && mode === 'manual' && viewRange > 0);
+    if (fog) {
+      el.style.background = 'var(--fog)';
+      arrow.textContent = ''; icon.textContent = '?'; icon.classList.remove('flip'); val.textContent = ''; slbl.textContent = '';
+      el.classList.toggle('start', false); el.classList.remove('inspect');
+      el.setAttribute('aria-label', '센서 밖, 보이지 않음');
+      continue;
+    }
+    if (t === '#') { bg = 'var(--wall)'; ic = '🏢'; el.setAttribute('aria-label', '건물'); }
+    else if (t === 'G') { bg = 'rgba(var(--good),.55)'; ic = '🏁'; el.setAttribute('aria-label', '목적지'); }
+    else if (t === 'X') { bg = 'rgba(var(--bad),.55)'; ic = '💥'; el.setAttribute('aria-label', '사고 위험'); }
+    else {
+      const v = maxQ(s), has = learned(s) && mode !== 'manual';
+      if (view.color && has) {
+        const a = Math.min(1, Math.abs(v) / scale) * 0.75;
+        const rgb = v >= 0 ? 'var(--good)' : 'var(--bad)';
+        bg = `linear-gradient(rgba(${rgb},${a.toFixed(3)}),rgba(${rgb},${a.toFixed(3)})),var(--road)`;
+      }
+      if (view.arrow && has && !isCar) ar = ARROWS[argmaxStable(s)];
+      if (view.num && has) vl = v.toFixed(1);
+      el.setAttribute('aria-label', '도로' + (has ? `, 점수 ${v.toFixed(1)}` : ''));
+    }
+    if (isCar) ic = '🚗';
+    icon.classList.toggle('flip', isCar && carFlip);
+    el.classList.toggle('inspect', !!inspect && inspect.r === r && inspect.c === c);
+    el.style.background = bg;
+    arrow.textContent = ar; icon.textContent = ic; val.textContent = vl;
+    slbl.textContent = isStart && !isCar ? '출발' : '';
+    el.classList.toggle('start', isStart);
+  }
+}
+function argmaxStable(s) { let b = 0; for (let a = 1; a < 4; a++) if (Q[s * 4 + a] > Q[s * 4 + b]) b = a; return b; }
+
+function renderStats() {
+  $('sEp').textContent = stats.ep; $('sGoal').textContent = stats.goal;
+  $('sCrash').textContent = stats.crash; $('sTime').textContent = stats.timeout;
+  const rc = stats.recent;
+  $('rate').textContent = rc.length ? `최근 ${rc.length}번 도착률: ${Math.round(rc.filter(Boolean).length / rc.length * 100)}%` : '최근 20번 도착률: -';
+  if (last) {
+    const label = { goal: '🏁 도착!', crash: '💥 사고!', timeout: '⏱ 시간 초과' }[last.outcome];
+    const lr = $('lastResult');
+    const who = { train: '마지막 학습 주행', ai: '🤖 AI 운전 결과', human: '🙋 내 운전 결과', humanS: '🙋 내 운전 결과' }[last.who];
+    lr.textContent = `${who}: ${label} ${last.steps}칸 이동, 총점 ${fmt(last.ret)}`;
+    if (last.who !== 'train') { lr.classList.remove('goal'); void lr.offsetWidth; lr.classList.toggle('goal', last.outcome === 'goal'); } else lr.classList.remove('goal');
+  } else if (mode === 'idle') $('lastResult').textContent = '아직 주행하지 않았어요.';
+  $('sHumanS').textContent = humanBestS === null ? '-' : fmt(humanBestS);
+  $('sAI').textContent = aiLast === null ? '-' : fmt(aiLast);
+  $('live').innerHTML = mode === 'manual'
+    ? `지금 주행: <b>${epSteps}</b>칸 이동, 총점 <b>${fmt(epReturn)}</b>점${lastStepR !== null ? ` (방금 ${lastStepR > 0 ? '+' : ''}${fmt(lastStepR)}점)` : ''}`
+    : '';
+}
+function renderInspector() {
+  const box = $('inspector');
+  if (!inspect) { box.innerHTML = '<h3>🔍 점수표 살펴보기</h3><p>"살펴보기" 도구를 고르고 도로 칸을 누르면, 차가 그 칸에서 각 방향으로 가면 몇 점을 받을 거라고 기억하는지 보여줘요.</p>'; return; }
+  const { r, c } = inspect, t = grid[r][c];
+  if (t !== '.') {
+    const nm = { '#': '건물', 'G': '목적지', 'X': '사고 위험' }[t];
+    box.innerHTML = `<h3>🔍 ${nm} 칸</h3><p>${nm} 칸에서는 주행이 끝나거나 들어갈 수 없어서 점수표가 없어요. 도로 칸을 눌러 보세요.</p>`; return;
+  }
+  const s = r * N + c, q = [0, 1, 2, 3].map(a => Q[s * 4 + a]), has = learned(s), b = argmaxStable(s);
+  const cellQ = a => `<div class="${has && a === b ? 'best' : ''}"><span class="ar">${ARROWS[a]}</span>${fmt(q[a])}점</div>`;
+  box.innerHTML = `<h3>🔍 선택한 칸의 점수표</h3>
+    <div class="qcross"><div style="visibility:hidden"></div>${cellQ(0)}<div style="visibility:hidden"></div>
+    ${cellQ(3)}<div class="mid">이 칸</div>${cellQ(1)}
+    <div style="visibility:hidden"></div>${cellQ(2)}<div style="visibility:hidden"></div></div>
+    <p>${has ? `차는 이 칸에서 <b>${ARROWS[b]}</b> 방향이 가장 점수가 높다고 기억하고 있어요. 학습할수록 이 숫자들이 바뀌어요.` : '아직 이 칸에서는 한 번도 배운 적이 없어서 모두 0점이에요.'}</p>`;
+}
+function fmt(x) { return (Math.round(x * 10) / 10).toString(); }
+
+function setMode(m) {
+  mode = m;
+  const pill = $('modePill');
+  pill.textContent = { idle: '멈춤', train: '학습 중', demo: '배운 대로 운전 중', manual: '🎮 내가 운전 중' }[m];
+  $('pad').hidden = m !== 'manual';
+  const bm = $('btnManual');
+  bm.textContent = m === 'manual' ? '🎮 운전 그만하기' : '🎮 내가 운전하기 (방향키)';
+  bm.classList.toggle('manual-on', m === 'manual');
+  pill.classList.toggle('on', m !== 'idle');
+  $('btnRun').textContent = m === 'train' ? '⏸ 일시정지' : '▶ 학습 시작';
+}
+
+function drawChart() {
+  const cv = $('chart'), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const cs = getComputedStyle(document.documentElement);
+  const muted = cs.getPropertyValue('--muted').trim(), dot = cs.getPropertyValue('--chart-dot').trim(),
+        line = cs.getPropertyValue('--chart-line').trim(), zero = cs.getPropertyValue('--zero').trim();
+  ctx.font = '12px "IBM Plex Sans KR", sans-serif'; ctx.fillStyle = muted;
+  const data = history.slice(-300), off = history.length - data.length;
+  if (!data.length) { ctx.textAlign = 'center'; ctx.fillText('학습을 시작하면 여기에 점수 그래프가 그려져요.', w / 2, h / 2); return; }
+  let mn = Math.min(0, ...data), mx = Math.max(0, ...data);
+  if (mx === mn) mx = mn + 1;
+  const L = 48, R = 12, T = 10, B = 26;
+  const X = i => L + (data.length === 1 ? 0.5 : i / (data.length - 1)) * (w - L - R);
+  const Y = v => T + (mx - v) / (mx - mn) * (h - T - B);
+  ctx.strokeStyle = zero; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(L, Y(0)); ctx.lineTo(w - R, Y(0)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.fillText(fmt(mx), L - 6, Y(mx)); ctx.fillText('0', L - 6, Y(0)); ctx.fillText(fmt(mn), L - 6, Y(mn));
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(`${off + 1}번째`, L, h - 6);
+  ctx.textAlign = 'right'; ctx.fillText(`${history.length}번째 주행`, w - R, h - 6);
+  ctx.fillStyle = dot;
+  data.forEach((v, i) => { ctx.beginPath(); ctx.arc(X(i), Y(v), 2.6, 0, Math.PI * 2); ctx.fill(); });
+  ctx.strokeStyle = line; ctx.lineWidth = 2.2; ctx.beginPath();
+  let sum = 0;
+  data.forEach((v, i) => {
+    sum += v; if (i >= 20) sum -= data[i - 20];
+    const avg = sum / Math.min(i + 1, 20);
+    i ? ctx.lineTo(X(i), Y(avg)) : ctx.moveTo(X(i), Y(avg));
+  });
+  ctx.stroke();
+}
+
+function renderAll(force) {
+  renderBoard(); renderStats(); renderInspector();
+  if (chartDirty || force) { drawChart(); chartDirty = false; }
+}
+
+let lastT = performance.now(), acc = 0;
+function frame(now) {
+  const dt = Math.min(100, now - lastT); lastT = now;
+  if (mode === 'train' || mode === 'demo') {
+    const sps = mode === 'demo' ? 5 : SPS[P.speed - 1];
+    acc += dt * sps / 1000;
+    let n = Math.min(Math.floor(acc), 20000); acc -= Math.floor(acc);
+    for (let i = 0; i < n && mode !== 'idle'; i++) step(mode === 'train', mode === 'demo');
+    if (n > 0) renderAll();
+  } else acc = 0;
+  requestAnimationFrame(frame);
+}
+
+function bindRange(id, outId, key, show) {
+  const el = $(id), out = $(outId);
+  const upd = () => { P[key] = parseFloat(el.value); out.textContent = show(P[key]); renderBoard(); };
+  el.addEventListener('input', upd); upd();
+}
+const signed = v => (v > 0 ? '+' : '') + v;
+
+$('btnRun').onclick = () => { if (mode === 'manual') { resetCar(); lastStepR = null; } setMode(mode === 'train' ? 'idle' : 'train'); renderAll(); };
+$('btnManual').onclick = () => {
+  if (mode === 'manual') { setMode('idle'); resetCar(); lastStepR = null; renderAll(); return; }
+  setMode('manual'); resetCar(); lastStepR = null; last = null; renderAll();
+};
+function setView(v) {
+  viewRange = v;
+  document.querySelectorAll('#viewctl button').forEach(x => x.setAttribute('aria-pressed', +x.dataset.v === v ? 'true' : 'false'));
+  if (mode !== 'manual') { setMode('manual'); last = null; }
+  resetCar(); lastStepR = null;
+  renderAll();
+}
+document.querySelectorAll('#viewctl button').forEach(b => b.onclick = () => setView(+b.dataset.v));
+document.querySelectorAll('#pad button').forEach(b => b.onclick = () => manualMove(+b.dataset.a));
+const KEYMAP = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3, w: 0, d: 1, s: 2, a: 3, W: 0, D: 1, S: 2, A: 3 };
+window.addEventListener('keydown', e => {
+  if (mode !== 'manual' || !(e.key in KEYMAP)) return;
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') e.target.blur();
+  e.preventDefault(); manualMove(KEYMAP[e.key]);
+});
+$('btnStep').onclick = () => { if (mode === 'manual') resetCar(); if (mode !== 'idle') setMode('idle'); step(true, false); renderAll(); };
+function fastTrain(n) {
+  if (mode === 'demo' || mode === 'manual') { setMode('idle'); resetCar(); }
+  const prev = mode; mode = 'train';
+  const target = stats.ep + n; let guard = 0, cap = n * P.maxSteps + 10;
+  while (stats.ep < target && guard++ < cap) step(true, false);
+  mode = prev; renderAll(true);
+}
+$('btnFast').onclick = () => fastTrain(100);
+function setParam(key, val) { const el = $(RANGE_IDS[key]); el.value = val; el.dispatchEvent(new Event('input')); }
+$('btnDefaults').onclick = () => { ['goalR', 'crashR', 'moveR'].forEach(k => setParam(k, DEFAULTS[k])); };
+function selectTool(t) {
+  tool = t;
+  document.querySelectorAll('#tools button').forEach(x => x.setAttribute('aria-pressed', x.dataset.tool === t ? 'true' : 'false'));
+}
+$('btnDemo').onclick = () => { resetCar(); setMode('demo'); renderAll(); };
+$('btnReset').onclick = () => { setMode('idle'); resetQ(); renderAll(true); };
+$('btnMap').onclick = () => { setMode('idle'); loadMap(DEFAULT_MAP); resetCar(); renderAll(); };
+
+document.querySelectorAll('#tools button').forEach(b => b.onclick = () => selectTool(b.dataset.tool));
+$('cColor').onchange = e => { view.color = e.target.checked; renderBoard(); };
+$('cArrow').onchange = e => { view.arrow = e.target.checked; renderBoard(); };
+$('cNum').onchange = e => { view.num = e.target.checked; renderBoard(); };
+
+const MISSIONS = [
+  { tab: '시작', title: '내가 먼저 운전해 보기',
+    how: '"실험 준비하기"를 누르면 운전 모드가 켜져요. ① 차 주변 2칸만 보이는 상태로 방향키를 써서 목적지 🏁를 찾아가 보세요. ② 👁 센서 시야를 "주변 1칸"으로 바꾸고 다시 도전해 보세요. 처음엔 길을 몰라 헤매지만, 여러 번 하다 보면 길을 기억하게 되죠? AI는 이보다 더해요. 지도도 목적지도 모르고 점수만 받아요. 그래도 배울 수 있을까요?',
+    setup: { manual: true }, q: 'AI는 몇 번쯤 주행해야 나만큼 잘 운전하게 될까요?',
+    opts: ['10번 안쪽', '수십~수백 번', '절대 못 배운다'], ans: 1,
+    exp: '처음 AI는 아무것도 몰라서 사고와 시간 초과를 반복해요. 하지만 점수를 받을 때마다 점수표를 고쳐서, 설정과 운에 따라 다르지만 보통 수백 번 주행하면 목적지까지 가요. 센서 시야로 운전하며 길을 기억했던 것처럼, AI의 점수표가 바로 그 기억이에요. ⚡ 100번 빠르게를 몇 번 누르고 🚗 배운 대로 운전 보기로 AI 점수와 내 최고 점수를 비교해 보세요. 사람은 몇 번이면 되는 일을 AI는 수백 번 해야 하지만, 대신 지치지 않고 아주 빠르게 연습할 수 있어요.' },
+  { tab: '미션 1', title: '사고 점수를 +10으로 바꾸면?',
+    how: '"실험 준비하기"를 누르면 사고 점수가 +10으로 바뀌고 차의 기억이 지워져요. 먼저 예측을 고른 뒤, ⚡ 100번 빠르게를 두세 번 누르고 🚗 배운 대로 운전 보기로 확인하세요.',
+    setup: { crashR: 10 }, q: '차는 어떻게 행동할까요?',
+    opts: ['사고를 더 조심한다', '일부러 사고를 내러 간다', '아무 변화가 없다'], ans: 1,
+    exp: '사고도 +10점이 되니 차에게 사고는 "또 하나의 목적지"예요. 멀리 있는 목적지보다 가까운 건물이나 사고 위험 칸이 더 빨리 점수를 주니까, 출발하자마자 부딪히는 쪽을 골라요. AI는 우리가 원하는 걸 아는 게 아니라 점수를 따라갈 뿐이에요.' },
+  { tab: '미션 2', title: '한 칸 움직일 때마다 +2점을 주면?',
+    how: '"실험 준비하기"를 누르면 이동 점수가 +2로 바뀌고 차의 기억이 지워져요. 예측을 고른 뒤 ⚡ 100번 빠르게를 두세 번 누르고 🚗 배운 대로 운전 보기로 확인하세요. 학습 중에는 새 길을 시도하다 부딪히기도 하니, 꼭 운전 보기로 확인해야 해요.',
+    setup: { moveR: 2 }, q: '차는 어떻게 행동할까요?',
+    opts: ['목적지로 더 빨리 간다', '목적지에 가지 않고 계속 돌아다닌다', '바로 사고를 낸다'], ans: 1,
+    exp: '움직이기만 해도 점수가 쌓이니, 도착해서 주행을 끝내는 게 오히려 손해예요. 그래서 운전 보기를 하면 차가 목적지를 두고 도로를 맴돌다 시간 초과가 나요. "많이 달리면 점수"처럼 잘못 정한 보상은 엉뚱한 행동을 만들어요. 그래서 자율주행 개발자에게는 보상 설계가 아주 중요해요.' },
+  { tab: '미션 3', title: '배운 길을 건물로 막으면?',
+    how: '"실험 준비하기"를 누르면 기본 규칙으로 300번 미리 학습하고 건물 도구가 선택돼요. 화살표를 따라 차가 다니는 길 중간에 🏢 건물을 놓은 뒤, 예측을 고르고 ▶ 학습 시작을 눌러 지켜보세요.',
+    setup: { pretrain: 300, tool: '#' }, q: '길이 막히면 차는 어떻게 될까요?',
+    opts: ['막힌 곳에서 계속 부딪힌다', '스스로 다른 길을 다시 찾아낸다', '처음부터 다시 배우기를 눌러야만 한다'], ans: 1,
+    exp: '막힌 곳에 부딪히면 사고 점수를 받아서 그 방향의 점수가 점점 내려가요. 반복하다 보면 다른 길의 점수가 더 높아져 새 길을 찾아요. 강화학습은 환경이 바뀌어도 시행착오로 다시 적응할 수 있어요. 공사 구간을 만난 자율주행차를 떠올려 보세요.' },
+  { tab: '도전', title: '가장 적은 주행 횟수로 도착률 80% 만들기',
+    how: '"실험 준비하기"로 처음 상태를 만든 뒤, 점수 규칙과 고급 설정을 바꿔 가며 최근 20번 도착률 80% 이상을 가장 적은 주행 횟수로 만드는 모둠이 이겨요. 힌트: 고급 설정의 "새 길 시도 비율"과 "학습률"도 바꿔 보세요.',
+    setup: {} }
+];
+let mCur = 0; const mDone = MISSIONS.map(() => false);
+function renderMissionTabs() {
+  $('mtabs').innerHTML = MISSIONS.map((m, i) => `<button role="tab" aria-selected="${i === mCur}" data-i="${i}">${mDone[i] ? '✓ ' : ''}${m.tab}</button>`).join('');
+  document.querySelectorAll('#mtabs button').forEach(b => b.onclick = () => { mCur = +b.dataset.i; renderMissionTabs(); renderMission(); });
+}
+function renderMission() {
+  const m = MISSIONS[mCur];
+  let h = `<h3>${m.title}</h3><p class="how">${m.how}</p><div class="mbtns"><button id="mSetup">🧪 실험 준비하기</button></div><div class="mready" id="mReady"></div>`;
+  if (m.opts) {
+    h += `<p style="margin:10px 0 0;font-weight:500">내 예측: ${m.q}</p><div class="opts">` +
+      m.opts.map((o, i) => `<label><input type="radio" name="mopt" value="${i}"> ${i + 1}. ${o}</label>`).join('') +
+      `</div><div class="mbtns"><button id="mCheck">결과 확인하기</button></div><div class="merr" id="mErr"></div><div id="mExp"></div>`;
+  }
+  $('mpanel').innerHTML = h;
+  $('mSetup').onclick = () => setupMission(m);
+  if (m.opts) {
+    document.querySelectorAll('input[name=mopt]').forEach(x => x.onchange = () => $('mErr').textContent = '');
+    $('mCheck').onclick = () => {
+      const sel = document.querySelector('input[name=mopt]:checked');
+      if (!sel) { $('mErr').textContent = '먼저 내 예측을 하나 골라 주세요.'; return; }
+      const ok = +sel.value === m.ans;
+      $('mExp').innerHTML = `<div class="mexp"><b class="${ok ? 'ok' : 'no'}">${ok ? '예측 성공!' : '예측과 달랐어요.'}</b> 정답은 ${m.ans + 1}번 "${m.opts[m.ans]}"예요.<br>${m.exp}<br><span style="color:var(--muted);font-size:13px">시뮬레이터에서 실제로 그렇게 움직이는지 꼭 직접 확인해 보세요.</span></div>`;
+      mDone[mCur] = true; renderMissionTabs();
+    };
+  }
+}
+function setupMission(m) {
+  setMode('idle');
+  Object.keys(DEFAULTS).forEach(k => setParam(k, DEFAULTS[k]));
+  loadMap(DEFAULT_MAP); inspect = null;
+  Object.entries(m.setup).forEach(([k, v]) => { if (RANGE_IDS[k]) setParam(k, v); });
+  resetQ();
+  if (m.setup.pretrain) fastTrain(m.setup.pretrain);
+  selectTool(m.setup.tool || '?');
+  if (m.setup.manual) { setMode('manual'); setView(2); }
+  renderAll(true);
+  $('mReady').textContent = m.setup.manual ? '준비 완료! 방향키로 운전을 시작하세요.' : m.setup.pretrain ? `준비 완료! ${m.setup.pretrain}번 미리 학습해 뒀어요.` : '준비 완료! 차의 기억이 지워졌어요.';
+}
+
+loadMap(DEFAULT_MAP);
+buildBoard();
+resetQ();
+bindRange('goalR', 'oGoal', 'goalR', signed);
+bindRange('crashR', 'oCrash', 'crashR', signed);
+bindRange('moveR', 'oMove', 'moveR', signed);
+bindRange('eps', 'oEps', 'eps', v => Math.round(v * 100) + '%');
+bindRange('alpha', 'oAlpha', 'alpha', v => v.toFixed(2));
+bindRange('gamma', 'oGamma', 'gamma', v => v.toFixed(2));
+bindRange('maxSteps', 'oMax', 'maxSteps', v => v + '칸');
+bindRange('speed', 'oSpeed', 'speed', v => SPEED_NAMES[v - 1]);
+renderMissionTabs(); renderMission();
+renderAll(true);
+new ResizeObserver(() => drawChart()).observe($('chart'));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => drawChart());
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
